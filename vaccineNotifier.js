@@ -26,12 +26,12 @@ let validCenters = [];
 async function main(){
     try {
         console.log("main called");
-        cron.schedule('2 * * * *', async () => {
-            console.log("Starting cron");
-             await checkAvailability();
-             console.log("Stopping cron");
-        });
-        // await checkAvailability();
+        // cron.schedule('2 * * * *', async () => {
+        //     console.log("Starting cron");
+        //      await checkAvailability();
+        //      console.log("Stopping cron");
+        // });
+        await checkAvailability();
     } catch (e) {
         console.log('an error occured: ' + JSON.stringify(e, null, 2));
         throw e;
