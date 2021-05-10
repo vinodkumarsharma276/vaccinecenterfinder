@@ -14,15 +14,24 @@ Step 3) On your terminal run: npm i && pm2 start vaccineNotifier.js
 To close the app, run: pm2 stop vaccineNotifier.js && pm2 delete vaccineNotifier.js
  */
 
-const PINCODE = process.env.PINCODE
-const EMAIL = process.env.EMAIL
-const AGE = process.env.AGE
+const PINCODE = process.env.PINCODE;
+const EMAIL = process.env.EMAIL;
+const AGE = process.env.AGE;
+const MIN_AGE = process.env.MIN_AGE;
+const MAX_AGE = process.env.MAX_AGE;
+const DISTRICT_ID = process.env.DISTRICT_ID;
+const VACCINE = process.env.VACCINE;
+let validCenters = [];
 
 async function main(){
     try {
-        cron.schedule('* * * * *', async () => {
+        console.log("main called");
+        cron.schedule('2 * * * *', async () => {
+            console.log("Starting cron");
              await checkAvailability();
+             console.log("Stopping cron");
         });
+        // await checkAvailability();
     } catch (e) {
         console.log('an error occured: ' + JSON.stringify(e, null, 2));
         throw e;
@@ -30,35 +39,62 @@ async function main(){
 }
 
 async function checkAvailability() {
-
+    console.log("checkAvailability called");
     let datesArray = await fetchNext10Days();
-    datesArray.forEach(date => {
+
+    datesArray.forEach(async(date) => {
         getSlotsForDate(date);
-    })
+        console.log("waiting");
+    });
+    
 }
 
-function getSlotsForDate(DATE) {
+const getSlotsForDate = async(DATE) => {
     let config = {
         method: 'get',
-        url: 'https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/findByPin?pincode=' + PINCODE + '&date=' + DATE,
+        url: 'https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/calendarByDistrict?district_id=' + DISTRICT_ID + '&date=' + DATE,
         headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36',
             'accept': 'application/json',
-            'Accept-Language': 'hi_IN'
-        }
+            'Accept-Language': 'en_IN'
+        },
     };
 
-    axios(config)
-        .then(function (slots) {
-            let sessions = slots.data.sessions;
-            let validSlots = sessions.filter(slot => slot.min_age_limit <= AGE &&  slot.available_capacity > 0)
-            console.log({date:DATE, validSlots: validSlots.length})
-            if(validSlots.length > 0) {
-                notifyMe(validSlots);
-            }
-        })
-        .catch(function (error) {
-            console.log(error);
+    console.log("url: ", config.url);
+    let district_ids = DISTRICT_ID.split(',');
+
+    for(let i=0; i<district_ids.length; i++){
+        let district_id = district_ids[i];
+        config.url = 'https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/calendarByDistrict?district_id=' + district_id + '&date=' + DATE;
+        // console.log(district_id, "url: ", config.url);
+        let slots = await axios(config);
+        let centers = slots.data.centers;
+        centers.map(center => {
+            center.sessions.map((session) => {
+                if(
+                    session.min_age_limit == MIN_AGE
+                &&  session.available_capacity > 0 
+                &&  session.vaccine == VACCINE
+                ){
+                    let validCenter = {
+                        center: '',
+                        district_name: center.district_name,
+                        date: '',
+                        vaccine: '',
+                        available_capacity: ''
+                    }
+                    validCenter.center = center.name;
+                    validCenter.date = session.date;
+                    validCenter.vaccine = session.vaccine;
+                    validCenter.available_capacity = session.available_capacity;
+                    console.log("validcenter: ", validCenter);
+                    validCenters.push(validCenter);
+                }
+            });
+            
         });
+    }
+    console.log("validCenters: ", validCenters);
 }
 
 async function
@@ -75,7 +111,7 @@ notifyMe(validSlots){
 async function fetchNext10Days(){
     let dates = [];
     let today = moment();
-    for(let i = 0 ; i < 10 ; i ++ ){
+    for(let i = 0 ; i < 1 ; i ++ ){
         let dateString = today.format('DD-MM-YYYY')
         dates.push(dateString);
         today.add(1, 'day');
@@ -85,4 +121,7 @@ async function fetchNext10Days(){
 
 
 main()
-    .then(() => {console.log('Vaccine availability checker started.');});
+    .then(() => {
+        console.log('Vaccine availability checker started.');
+        // console.log("validcenters: ", validCenters);
+    });
